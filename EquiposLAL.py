@@ -8,140 +8,16 @@ import pyqtgraph as pg
 from PyQt5.QtWidgets import QMainWindow,  QMessageBox
 from PyQt5.QtCore import QTimer
 import serial.tools.list_ports
+import pyvisa 
 
 
-class MainWindow(QMainWindow):
-    """Clase base para generar ventanas de interfaces (GUI). Llama a la plantilla .ui (puede estar armada
-    en QTdesigner) y en este caso tiene 1 botón para inicia, 3 campos de texto para ingresar parametros y 
-    dos graficos en función del tiempo. 
-
-    """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        uic.loadUi(os.path.join(os.path.dirname(__file__), 'control_temperatura.ui'), self)
-
-        # conectar el botón al método
-        self.boton_on_off.clicked.connect(self.toggle_button)
-
-        # estado inicial
-        self.estado_on = True
-        self.boton_on_off.setText("ON")
-        self.boton_on_off.setStyleSheet("background-color: lightgreen; color: black;")
-
-        # Gráficos
-        self.configurar_graficos(self.Grafico_temperatura, xlabel='Tiempo[s]', ylabel='Temperatura [°C]')
-        self.configurar_graficos(self.Grafico_corriente, xlabel='Tiempo[s]', ylabel='Corriente [A]')
-
-        #Inicializar datos de temperatura
-        self.tiempo = []
-        self.temperaturas = []
-        self.t_actual = 0
-        self.temperatura_actual = 25.0
-
-        # 🔹 Crear la curva en el gráfico de temperatura
-        self.curva_temp = self.Grafico_temperatura.plot(pen=pg.mkPen('r', width=2))
-
-        # 🔹 Timer para actualización
-        # self.timer_temp = QTimer(self)
-        # self.timer_temp.timeout.connect(self.actualizar_datos_temperatura)
-        # self.timer_temp.start(1000)  # cada 1 segundo
-
-        # 🔹 Label inicial
-        self.label_temp_actual.setText(f"{self.temperatura_actual:.1f} °C")
-        self.label_temp_actual.setText(f"{self.temperatura_actual:.1f} °C")
-        self.label_temp_actual.setStyleSheet("""
-         background-color: #1b3b1b;     
-         color: white;                   
-         font-size: 28pt;                
-         font-weight: bold;
-        border: 2px solid black;
-        border-radius: 8px;
-        padding: 6px;
-        qproperty-alignment: 'AlignCenter';
-        """)
-
-
-
-    def configurar_graficos(self, grafico, xlabel='', ylabel='', title=''):
-        grafico.setBackground('w')
-        grafico.showGrid(x=True, y=True, alpha=0.3)
-        grafico.setLabel('left', ylabel, color='black', size='12pt')
-        grafico.setLabel('bottom', xlabel, color='black', size='12pt')
-        grafico.setTitle(title, color='w', size='14pt')
-
-    def toggle_button(self):
-        # Verificar que los campos sean numéricos y estén dentro de rango
-        valido, mensaje_error = self.verificar_campos()
-        if not valido:
-            QMessageBox.critical(self, "Error de entrada", mensaje_error)
-            return  # No cambia el botón si hay error
-
-        # Si todo está bien, alternar ON/OFF
-        if self.estado_on:
-            self.boton_on_off.setText("OFF")
-            self.boton_on_off.setStyleSheet("background-color: red; color: white;")
-        else:
-            self.boton_on_off.setText("ON")
-            self.boton_on_off.setStyleSheet("background-color: lightgreen; color: black;")
-
-        self.estado_on = not self.estado_on
-
-        
-
-    def verificar_campos(self):
-        """
-        Devuelve (True, "") si todos los campos son válidos.
-        Si hay error, devuelve (False, mensaje_error).
-        """
-        try:
-            rate = float(self.lineEdit_rate.text().strip())
-            setpoint = float(self.lineEdit_setpoint.text().strip())
-            t_inicial = float(self.lineEdit_T_inicial.text().strip())
-        except ValueError:
-            return False, "Solo se permiten valores numéricos en Rate, Setpoint y T inicial."
-
-        # Validar rangos
-        if not (1 <= rate <= 20):
-            return False, "El valor de 'Rate' debe estar entre 1 y 20."
-        if not (30 <= setpoint <= 850):
-            return False, "El valor de 'Setpoint' debe estar entre 30 y 850."
-        if not (50 <= t_inicial <= 120):
-            return False, "El valor de 'T inicial' debe estar entre 50 y 120."
-
-        return True, ""
-
-
-    #def actualizar_datos_temperatura(self):
-    #    """
-    #    Actualiza la gráfica y el label con una nueva temperatura (simulada o real)
-    #    """
-    #    # Si el botón está en OFF, no actualizar
-    #    if not self.estado_on:
-    #        return
-
-    #    # Simular aumento o fluctuación de temperatura (reemplazalo por lectura real)
-    #    self.temperatura_actual += random.uniform(-0.5, 0.8)
-    #    self.t_actual += 1
-
-    #    # Guardar datos
-    #    self.tiempo.append(self.t_actual)
-    #    self.temperaturas.append(self.temperatura_actual)
-
-    #    # Actualizar gráfico
-    #    self.curva_temp.setData(self.tiempo, self.temperaturas)
-
-    #    # Actualizar label
-    #    self.label_temp_actual.setText(f"{self.temperatura_actual:.1f} °C")
- 
-
-
-
+###########################################################################################
+###########################################################################################
 
 
 class ArduinoUNO():
   
     # -------------------------------------------------------------------------
-
         
     def medicion_temp_arduino(self, ser):
         '''La medicion de temperatura se hace a demanda, el arduino no esta midiendo hasta
@@ -152,6 +28,8 @@ class ArduinoUNO():
             float -> temperatura válida
             None  -> dato inválido común
             "FALLO" -> fallo crítico del Arduino
+
+        La comunicacion se hace con pyserial. 
         '''
         try:
             ser.write(b'GET\n')
@@ -248,11 +126,13 @@ class ArduinoUNO():
         return ser 
 
 
+###########################################################################################
+###########################################################################################
 
 
 
 class TDKLambdaGENH20:
-    """Control básico de la fuente TDK Lambda GENH20 mediante puerto serial."""
+    """Control básico de la fuente TDK Lambda GENH20 mediante puerto serial (pyserial)."""
 
     def __init__(self):
         self.corriente_maxima = 22
@@ -343,3 +223,150 @@ class TDKLambdaGENH20:
         resultado = f"Vmedido={Vmedido} V, Vset={Vset} V, Imedido={Imedido} A, Iset={Iset} A"
         print(resultado)
         return Vmedido, Vset, Imedido, Iset
+    
+    
+
+###########################################################################################
+###########################################################################################
+
+
+class OWONodp3063:
+    """Clase base para la fuente de tension/corriente OWON ODP3063. 
+    La comunicacion se hace con pyvisa.
+
+    14/1/2025: Como por ahora solo la voy a usar para implementar un heater, por defecto los 
+    canales 1 y 2 van a estar conectados en serie y solo voy a hacer referencia al canal 1 
+    cuando interactuo con la fuente.  
+    
+    """
+    # -------------------------------------------------------------------------
+    
+    def __init__(self):
+    
+        self.fuente = None  # se inicializa vacía hasta conectar
+        self.corriente_maxima = 5.8
+
+    # -------------------------------------------------------------------------
+
+    def detectar_fuente_por_vidpid(self, rm):
+        """
+        Detecta y abre la fuente OWON con USB VISA basado en el VID y PID de manera automatica.
+
+        Parámetros:
+            rm (obj) : Resource Manager global del programa. 
+
+        Retorna:
+            r (string): direccion del puerto en el que esta conectado la fuente
+
+        Lanza:
+            RuntimeError: si no se encuentra ningún dispositivo
+        """
+        vid = "0x5345"
+        pid = "0x1235"
+ 
+        # Buscar solo recursos USB
+        recursos = rm.list_resources('?*USB?*')
+
+        for r in recursos:
+            partes = r.split("::")
+
+            # Formato esperado: USB0::VID::PID::SERIAL::INTERFACE::INSTR
+            if len(partes) >= 3:
+                vid_r = partes[1]
+                pid_r = partes[2]
+
+                if vid_r.upper() == vid.upper() and pid_r.upper() == pid.upper():
+                    print(f"Fuente encontrada: {r}")
+                    return r
+
+        raise RuntimeError(f"No se encontró ninguna fuente con VID={vid} y PID={pid}")
+
+
+    # -------------------------------------------------------------------------
+
+
+    def conectar_fuente_OWON_visa(self, rm ,port):
+        """Conecta la fuente y hace la configuracion inicial para alimentar un heater. 
+        14/1/2025: por default conecta en serie los canales 1 y 2, bloquea los controles del 
+        aparato, setea las salidas a cero y activa la salida del canal 1 (en modo serie puedo 
+        hacer referencia al canal 1 o 2).  
+
+        Returns:
+            fuente : objeto de la clase Resource de pyvisa
+        """        
+        
+        self.fuente = rm.open_resource(port)  # Ajustar según tu equipo
+        print('Identificación: ' + self.fuente.query("*IDN?"))
+        # Configuración remota y encendido
+        self.fuente.query('SYSTem:REMote') 
+        print('Controles panel frontal bloqueados' )
+        self.fuente.query('OUTP:SERies ON') 
+        print('Canal 1 y 2 conectados en serie.' )
+        self.fuente.write("APP:VOLT 0,0,0")
+        
+        print(f'Corriente maxima seteada : {self.corriente_maxima}.' )
+        self.fuente.write("CURR " + f"{self.corriente_maxima}") 
+        
+        print('Voltajes de salida seteados a cero.' )
+        self.fuente.write("CHAN:OUTP:ALL 1,0,0") 
+        #PONER CORRIENTE DE SALIDA AL MAXIMO???
+        print('Canal 1 activado.')
+        time.sleep(2)
+        print('Conexión y configuración inicial completa.')
+        return self.fuente
+
+    # -------------------------------------------------------------------------
+
+
+    def set_voltaje(self, voltaje,canal):
+        self.fuente.write("INST CH" + f"{canal}") 
+        self.fuente.write("VOLT " + f"{float(voltaje)}") #setea el valor de voltaje para el canal elegido  
+        return
+
+    # -------------------------------------------------------------------------
+
+
+    def set_corriente(self, corriente,canal):
+        self.fuente.write("INST CH" + f"{canal}") 
+        self.fuente.write("CURR " + f"{float(corriente)}") #setea el valor de voltaje para el canal elegido  
+        return
+
+
+    # -------------------------------------------------------------------------
+
+    def leer_corriente(self):
+        """Lee la corriente de salida real de la fuente."""
+        respuesta = self.fuente.query("MEAS:CURR?")
+        try:
+            return float(respuesta)
+        except ValueError:
+            print(f"Error leyendo corriente: {respuesta}")
+            return None
+
+
+    # -------------------------------------------------------------------------
+
+    def is_open(self, device):  
+        try:
+            device.write("*IDN?")
+            abierto = True
+            return abierto
+        except pyvisa.errors.InvalidSession:
+            abierto = False
+            return abierto 
+        
+
+    
+    def reset_fuente(self):
+        """Setea el voltaje en cero, apaga la salida y libera el panel."""
+        if self.fuente and self.is_open(self.fuente):
+            self.fuente.write("APP:VOLT 0,0,0")
+            self.fuente.write("CHAN:OUTP:ALL 0,0,0") 
+            self.fuente.query('SYSTem:LOCal') 
+            self.fuente.close()
+            print("Fuente reseteada y conexión cerrada.")
+        else:
+            print("No hay una fuente conectada.")
+    
+
+
